@@ -59,8 +59,12 @@ INNER JOIN products p on o.product = p.productid"""
 
 val results = spark.sql(statement)
 
-results.write.parquet("/mnt/data/optimized-orders-store/data.parquet")
 
+
+
+// COMMAND ----------
+
+results.write.parquet("/mnt/data/optimized-orders-store/data.parquet")
 
 // COMMAND ----------
 
@@ -86,3 +90,46 @@ results.write.parquet("/mnt/data/optimized-orders-store/data.parquet")
 // MAGIC SELECT sum(orderamount), billingaddress
 // MAGIC FROM CaseStudyDB.ProcessedOrders
 // MAGIC GROUP BY billingaddress
+
+// COMMAND ----------
+
+results.printSchema
+
+// COMMAND ----------
+
+val blobStorage = "polystorageacc.blob.core.windows.net"
+val blobContainer = "polystorage"
+val blobAccessKey =  "6jrrfYbUv9XViu1jgqEp7N3Ro39voDVzQIyYMsm6iUTdYhRXjZfHByV9Lt3gGdE6LGqS2HL/mM8+TOfUMM+jCQ=="
+
+val tempDir = "wasbs://" + blobContainer + "@" + blobStorage +"/tempDirs"
+val acntInfo = "fs.azure.account.key."+ blobStorage
+
+sc.hadoopConfiguration.set(acntInfo, blobAccessKey)
+
+// COMMAND ----------
+
+val dwDatabase = "snapwarehouse"
+val dwServer = "snapsqlserver.database.windows.net"
+val dwUser = "kapatel"
+val dwPass = "1qaz!QAZ"
+val dwJdbcPort =  "1433"
+val sqlDwUrlSmall = "jdbc:sqlserver://" + dwServer + ":" + dwJdbcPort + ";database=" + dwDatabase + ";user=" + dwUser+";password=" + dwPass
+
+
+// COMMAND ----------
+
+spark.conf.set(
+    "spark.sql.parquet.writeLegacyFormat",
+    "true")
+
+// COMMAND ----------
+
+results
+	.write
+	.format("com.databricks.spark.sqldw")
+	.option("url", sqlDwUrlSmall)
+	.option("dbtable", "ProcessedOrders")       
+	.option( "forward_spark_azure_storage_credentials","True")
+	.option("tempdir", tempDir)
+	.mode("overwrite")
+	.save()
